@@ -1,14 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from pathlib import Path
 from loguru import logger
 
 from core.config import settings
 from agents.support_agent import support_agent
 from channels.web_adapter import web_adapter
 from storage.vector_store import vector_store
+from utils.file_processor import file_processor
 
 # Configure logging
 logger.add("logs/api.log", rotation="500 MB", retention="10 days", level=settings.log_level)
@@ -210,6 +212,127 @@ async def delete_collection():
     except Exception as e:
         logger.error(f"Error deleting collection: {e}")
         raise HTTPException(status_code=500, detail=f"Error deleting collection: {str(e)}")
+
+
+@app.post("/documents/upload-file")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    Upload and process a file (CSV, Excel, PDF, TXT, DOCX)
+    Automatically extracts content and adds to knowledge base
+    """
+    try:
+        logger.info(f"Received file upload: {file.filename}")
+        
+        # Check file extension
+        supported_extensions = file_processor.get_supported_extensions()
+        file_ext = Path(file.filename).suffix.lower()
+        
+        if file_ext not in supported_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Supported: {', '.join(supported_extensions)}"
+            )
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Process file
+        documents, metadatas = file_processor.process_file(file_content, file.filename)
+        
+        # Add to vector store
+        vector_store.add_documents(
+            documents=documents,
+            metadatas=metadatas
+        )
+        
+        logger.info(f"Successfully processed and added {len(documents)} documents from {file.filename}")
+        
+        return {
+            "status": "success",
+            "message": f"File processed successfully",
+            "filename": file.filename,
+            "documents_added": len(documents),
+            "file_type": file_ext
+        }
+    
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+@app.post("/documents/upload-multiple")
+async def upload_multiple_files(files: List[UploadFile] = File(...)):
+    """
+    Upload and process multiple files at once
+    """
+    try:
+        results = []
+        total_documents = 0
+        
+        for file in files:
+            logger.info(f"Processing file: {file.filename}")
+            
+            try:
+                # Read and process file
+                file_content = await file.read()
+                documents, metadatas = file_processor.process_file(file_content, file.filename)
+                
+                # Add to vector store
+                vector_store.add_documents(
+                    documents=documents,
+                    metadatas=metadatas
+                )
+                
+                results.append({
+                    "filename": file.filename,
+                    "status": "success",
+                    "documents_added": len(documents)
+                })
+                
+                total_documents += len(documents)
+            
+            except Exception as e:
+                logger.error(f"Error processing {file.filename}: {e}")
+                results.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        return {
+            "status": "completed",
+            "total_files": len(files),
+            "total_documents_added": total_documents,
+            "results": results
+        }
+    
+    except Exception as e:
+        logger.error(f"Error uploading multiple files: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing files: {str(e)}")
+
+
+@app.get("/documents/supported-formats")
+async def get_supported_formats():
+    """
+    Get list of supported file formats
+    """
+    return {
+        "supported_formats": file_processor.get_supported_extensions(),
+        "descriptions": {
+            ".csv": "Comma-separated values",
+            ".xlsx": "Excel spreadsheet (modern)",
+            ".xls": "Excel spreadsheet (legacy)",
+            ".pdf": "Portable Document Format",
+            ".txt": "Plain text",
+            ".md": "Markdown",
+            ".docx": "Word document (modern)",
+            ".doc": "Word document (legacy)"
+        }
+    }
 
 
 @app.post("/webhook/instagram")

@@ -33,18 +33,18 @@ class SupportAgent:
     
     def _initialize_llm(self):
         """Initialize the LLM based on configuration"""
-        if settings.llm_provider == "anthropic":
-            return ChatAnthropic(
-                model=settings.llm_model,
-                temperature=settings.llm_temperature,
-                anthropic_api_key=settings.anthropic_api_key
-            )
-        else:
-            return ChatOpenAI(
-                model=settings.llm_model,
-                temperature=settings.llm_temperature,
-                openai_api_key=settings.openai_api_key
-            )
+        # if settings.llm_provider == "anthropic":
+        #     return ChatAnthropic(
+        #         model=settings.llm_model,
+        #         temperature=settings.llm_temperature,
+        #         anthropic_api_key=settings.anthropic_api_key
+        #     )
+        # else:
+        return ChatOpenAI(
+            model=settings.llm_model,
+            temperature=settings.llm_temperature,
+            openai_api_key=settings.openai_api_key
+        )
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow"""

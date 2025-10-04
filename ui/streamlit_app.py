@@ -116,6 +116,61 @@ with st.sidebar:
     if stats:
         st.metric("Documents", stats.get("count", 0))
     
+    # File uploader
+    st.markdown("### Upload Documents")
+    uploaded_files = st.file_uploader(
+        "Upload your business documents",
+        type=['csv', 'xlsx', 'xls', 'pdf', 'txt', 'md', 'docx', 'doc'],
+        accept_multiple_files=True,
+        help="Supported: CSV, Excel, PDF, Text, Word documents"
+    )
+    
+    if uploaded_files:
+        if st.button("Process Uploaded Files", type="primary"):
+            with st.spinner("Processing files..."):
+                success_count = 0
+                error_count = 0
+                
+                for uploaded_file in uploaded_files:
+                    try:
+                        # Prepare file for upload
+                        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+                        
+                        response = requests.post(
+                            f"{API_URL}/documents/upload-file",
+                            files=files,
+                            timeout=60
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            st.success(f"✅ {uploaded_file.name}: Added {result['documents_added']} documents")
+                            success_count += 1
+                        else:
+                            st.error(f"❌ {uploaded_file.name}: {response.json().get('detail', 'Unknown error')}")
+                            error_count += 1
+                    
+                    except Exception as e:
+                        st.error(f"❌ {uploaded_file.name}: {str(e)}")
+                        error_count += 1
+                
+                if success_count > 0:
+                    st.success(f"🎉 Successfully processed {success_count} file(s)!")
+                    st.rerun()
+                
+                if error_count > 0:
+                    st.warning(f"⚠️ {error_count} file(s) failed to process")
+    
+    # Show supported formats
+    with st.expander("📄 Supported Formats"):
+        st.markdown("""
+        - **CSV** (.csv) - Each row becomes a document
+        - **Excel** (.xlsx, .xls) - Each row in each sheet
+        - **PDF** (.pdf) - Each page becomes a document
+        - **Text** (.txt, .md) - Entire file as document
+        - **Word** (.docx, .doc) - Entire document
+        """)
+    
     if st.button("Add Sample Documents"):
         with st.spinner("Adding sample documents..."):
             if add_sample_documents():

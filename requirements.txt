@@ -39,3 +39,9 @@ tiktoken==0.5.2
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3
+
+# File Processing
+PyPDF2==3.0.1
+openpyxl==3.1.2
+pandas==2.1.4
+python-docx==1.1.0
